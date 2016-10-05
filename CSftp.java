@@ -81,7 +81,7 @@ public class CSftp
 	            }
 	            System.out.println("< " + result);
 	        } catch (IOException e) {
-	            System.out.println("925 Control connection I/O error, closing control connection");
+	            System.out.println("925 Control connection I/O error, closing control connection.");
 	                socket.close();
 	                ftpInput.close();
 	                printWriter.close();
@@ -99,6 +99,25 @@ public class CSftp
 			if ((userInput[0].equals("") || userInput[0].startsWith("#"))) {
 				continue;
 			}
+			
+            if (userInput[0].equals("quit")) {
+            	
+            	if (userInput.length == 1) {
+            		if(socket.isConnected()) {
+            			socket.close();
+            			printWriter.close();
+            			ftpInput.close();
+            		}
+            		System.out.println("Closing connection and client.");
+            		break;
+            	}
+            	
+            	else {
+                    System.out.println("901 Incorrect number of arguments.");
+                    continue;
+            	}
+            	
+            }
 		
 			System.out.println("900 Invalid command.");
 		}
