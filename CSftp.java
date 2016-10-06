@@ -25,6 +25,7 @@ public class CSftp
 
     public static void main(String [] args)
     {
+    	
 	byte cmdString[] = new byte[MAX_LEN];
 	String server = args[0];
 	Integer portNumber;
@@ -73,19 +74,7 @@ public class CSftp
 	            return;
 	        }
 	        
-	        // Parse responses with multiple lines
-	        try {
-	            String result = ftpInput.readLine();
-	            while (!(result.matches("\\d\\d\\d\\s.*"))) {
-	                System.out.println(result);			   
-	            }
-	            System.out.println("< " + result);
-	        } catch (IOException e) {
-	            System.out.println("925 Control connection I/O error, closing control connection.");
-	                socket.close();
-	                ftpInput.close();
-	                printWriter.close();
-	        }
+	        parseMultipleLineResponse();
 			}
 	        
 			System.out.print("csftp> ");
@@ -100,24 +89,67 @@ public class CSftp
 				continue;
 			}
 			
+			
+			// quit command
             if (userInput[0].equals("quit")) {
             	
             	if (userInput.length == 1) {
+            		
             		if(socket.isConnected()) {
             			socket.close();
             			printWriter.close();
             			ftpInput.close();
             		}
+            		
             		System.out.println("Closing connection and client.");
             		break;
+            		
             	}
             	
             	else {
+            		
                     System.out.println("901 Incorrect number of arguments.");
                     continue;
+                    
             	}
             	
             }
+            
+            // user command
+            if (userInput[0].equals("user") && userInput.length == 2 && !socket.isClosed() && socket.isConnected()) {
+            	
+                String username = "USER " + userInput[1];
+                sendCommand(username);
+                parseMultipleLineResponse();
+                cmdString = new byte[MAX_LEN];
+                continue;
+                
+            } else if (userInput[0].equals("user")) {
+            	
+                if (userInput.length != 2) {
+                    System.out.println("901 Incorrect number of arguments");
+                    continue;
+                }
+                
+                if (socket.isClosed() || !socket.isConnected()) {
+                    System.out.println("903 Supplied command not expected at this time.");
+                    continue;
+                }
+                
+
+                
+            }
+            
+            // password command only usable if the last response code was 331 specify password
+            if (userInput[0].equals("pw") && userInput.length == 2 ) {
+                String password = "PASS " + removeNewLine(new String(cmdString, "UTF-8"));
+                sendCommand(password);
+                parseMultipleLineResponse();
+                cmdString = new byte[MAX_LEN];
+                continue;
+            	
+            }
+            
 		
 			System.out.println("900 Invalid command.");
 		}
@@ -128,6 +160,32 @@ public class CSftp
        		System.err.println("999 Processing error. " + e.getMessage());
     	}
     }
+    
+    public static String removeNewLine(String input) {
+        return input.split("(\\r)?\\n")[0];
+    }
+    
+    public static void sendCommand(String command) {
+        
+        printWriter.print(command+"\r\n");
+        printWriter.flush();
+        System.out.println("--> " + command);
+    }
+
+	private static void parseMultipleLineResponse() throws IOException {
+		try {
+		    String result = ftpInput.readLine();
+		    while (!(result.matches("\\d\\d\\d\\s.*"))) {
+		        System.out.println(result);			   
+		    }
+		    System.out.println("<-- " + result);
+		} catch (IOException e) {
+		    System.out.println("925 Control connection I/O error, closing control connection.");
+		        socket.close();
+		        ftpInput.close();
+		        printWriter.close();
+		}
+	}
     
     public static String[] parseInput(byte[] cmdString) {
     	String cmd = "";
