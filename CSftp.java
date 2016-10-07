@@ -50,31 +50,32 @@ public class CSftp
 
 	try {
 		for (int len = 1; len > 0;) {
-	    
+			
 			if (!socket.isConnected() || socket.isClosed()) {
-	    	// Connect to FTP server
-	    	try {
-	    		socket = new Socket(server, portNumber);
-	    	} catch (IOException e) {
-	            System.out.println("920 Control connection to " + server + " on port " + portNumber + " failed to open.");
-	            return;
-	    	} catch (IllegalArgumentException e) {
-	            System.out.println("920 Control connection to " + server + " on port " + portNumber + " failed to open.");
-	            return;
-	    	}
-	    	
-	        try {
-	            ftpInput = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-	            printWriter = new PrintWriter(socket.getOutputStream());
-	        } catch (IOException e) {
-	            System.out.println("925 Control connection I/O error, closing control connection.");
-	    		socket.close();
-	    		ftpInput.close();
-	            printWriter.close();
-	            return;
-	        }
-	        
-	        parseMultipleLineResponse();
+				// Connect to FTP server
+				try {
+					socket = new Socket(server, portNumber);
+				} catch (IOException e) {
+			        System.out.println("920 Control connection to " + server + " on port " + portNumber + " failed to open.");
+			        return;
+				} catch (IllegalArgumentException e) {
+			        System.out.println("920 Control connection to " + server + " on port " + portNumber + " failed to open.");
+			        return;
+				}
+				
+			    try {
+			        ftpInput = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+			        printWriter = new PrintWriter(socket.getOutputStream());
+			    } catch (IOException e) {
+			        System.out.println("925 Control connection I/O error, closing control connection.");
+					socket.close();
+					ftpInput.close();
+			        printWriter.close();
+			        return;
+			    }
+			    
+			    
+			    parseResponse();
 			}
 	        
 			System.out.print("csftp> ");
@@ -88,8 +89,50 @@ public class CSftp
 			if ((userInput[0].equals("") || userInput[0].startsWith("#"))) {
 				continue;
 			}
-			
-			
+            
+            // user command
+            if (userInput[0].equals("user")) {
+            	
+            	if (userInput.length == 2) {
+            		
+                    String username = "USER " + userInput[1];
+                    sendCommand(username);
+                    parseResponse();
+                    cmdString = new byte[MAX_LEN];
+                    continue;
+            	}
+            	
+            	else {
+            		
+                    System.out.println("901 Incorrect number of arguments");
+                    continue;
+            		
+            	}
+                
+            } 
+            
+            // password command
+            if (userInput[0].equals("pw")) {
+            	
+            	if (userInput.length == 2) {
+            		
+                String password = "PASS " + userInput[1];
+                sendCommand(password);
+                parseResponse();
+                cmdString = new byte[MAX_LEN];
+                continue;
+                
+            	}
+            	
+            	else {
+            		
+                    System.out.println("901 Incorrect number of arguments");
+                    continue;
+            		
+            	}
+            	
+            }
+            
 			// quit command
             if (userInput[0].equals("quit")) {
             	
@@ -115,56 +158,118 @@ public class CSftp
             	
             }
             
-            // user command
-            if (userInput[0].equals("user") && userInput.length == 2 && !socket.isClosed() && socket.isConnected()) {
+            // cd command
+            if (userInput[0].equals("cd")) {
             	
-                String username = "USER " + userInput[1];
-                sendCommand(username);
-                parseMultipleLineResponse();
-                cmdString = new byte[MAX_LEN];
-                continue;
-                
-            } else if (userInput[0].equals("user")) {
+            	if (userInput.length == 2) {
+            		
+            		sendCommand("CWD " + userInput[1]);
+            		parseResponse();
+                    
+                    cmdString = new byte[MAX_LEN];
+                    continue;
+            	}
             	
-                if (userInput.length != 2) {
+            	else {
+            		
+                    System.out.println("901 Incorrect number of arguments.");
+                    continue;
+            		
+            	}
+            	
+            }
+            
+            // dir command
+            if (userInput[0].equals("dir")) {
+            	
+            	if (userInput.length == 1) {
+            		
+            		sendCommand("PASV");
+            		String response = parseResponse();
+            		if (response.startsWith("227")) {
+
+            		String[] ipAndPort = parseIPAndPort(response);
+            		
+            		Socket dataConnection = new Socket(ipAndPort[0], Integer.parseInt(ipAndPort[1]));
+            		try {
+						if (ftpInput.ready()) {
+							response = ftpInput.readLine();
+							if (response.startsWith("425")) {
+								
+								System.out.println("930 Data transfer connection to " + ipAndPort[0] + 
+												   " on port " + ipAndPort[1] + " failed to open.");
+								continue;
+								
+							}
+						}
+						
+						sendCommand("LIST");
+						parseResponse();
+						
+                        BufferedReader dataIn = new BufferedReader(new InputStreamReader(dataConnection.getInputStream()));
+                        String line;
+                        while((line = dataIn.readLine()) != null){
+                            System.out.println(line);
+                        }
+                        dataConnection.close();
+                        dataIn.close();
+                        
+                        parseResponse();
+						
+					} catch (IOException io) {
+						
+						System.out.println("935 Data transfer connection I/O error, closing data connection.");
+                        dataConnection.close();
+                        
+	                } catch (IllegalArgumentException i) {
+	                	
+						System.out.println("930 Data transfer connection to " + ipAndPort[0] + 
+								   " on port " + ipAndPort[1] + " failed to open.");
+
+	                }
+            		
+                    cmdString = new byte[MAX_LEN];
+                    continue;
+            		
+            		}
+            		
+            	}
+            	
+            	else {
+            		
                     System.out.println("901 Incorrect number of arguments");
                     continue;
-                }
-                
-                if (socket.isClosed() || !socket.isConnected()) {
-                    System.out.println("903 Supplied command not expected at this time.");
-                    continue;
-                }
-                
-
-                
+            		
+            	}
+            
             }
             
-            // password command only usable if the last response code was 331 specify password
-            if (userInput[0].equals("pw") && userInput.length == 2 ) {
-                String password = "PASS " + removeNewLine(new String(cmdString, "UTF-8"));
-                sendCommand(password);
-                parseMultipleLineResponse();
-                cmdString = new byte[MAX_LEN];
-                continue;
-            	
-            }
+            System.out.println("900 Invalid command.");
             
-		
-			System.out.println("900 Invalid command.");
 		}
 		
 		} catch (IOException exception) {
 	    	System.err.println("998 Input error while reading commands, terminating.");
+	    	return;
 		} catch (Exception e) {
        		System.err.println("999 Processing error. " + e.getMessage());
     	}
     }
     
-    public static String removeNewLine(String input) {
-        return input.split("(\\r)?\\n")[0];
+    // Parses the IP address and Port number received when entering passive mode
+    private static String[] parseIPAndPort(String response) {
+    	
+    	String split[] = response.split("\\(");
+    	String numbers[] = split[1].split(",");
+    	numbers[5] = numbers[5].replaceAll("[^0-9]", "");
+    	String ip = numbers[0] + "." + numbers[1] + "." + numbers[2] + "." + numbers[3];
+    	String port = Integer.toString(((Integer.parseInt(numbers[4]) * 256) + Integer.parseInt(numbers[5])));
+    	String parsedResult[] = { ip, port };
+    	return parsedResult;
     }
+
     
+    // Sends the user command to the server and prints what command was sent onto the console
     public static void sendCommand(String command) {
         
         printWriter.print(command+"\r\n");
@@ -172,21 +277,30 @@ public class CSftp
         System.out.println("--> " + command);
     }
 
-	private static void parseMultipleLineResponse() throws IOException {
+    // Parses the response from the server
+	private static String parseResponse() throws IOException {
 		try {
-		    String result = ftpInput.readLine();
-		    while (!(result.matches("\\d\\d\\d\\s.*"))) {
-		        System.out.println(result);			   
+		    String result;
+		    while (!(result = ftpInput.readLine()).matches("\\d\\d\\d\\s.*")) {
+		        System.out.println(result);	
 		    }
 		    System.out.println("<-- " + result);
+		    return result;
 		} catch (IOException e) {
 		    System.out.println("925 Control connection I/O error, closing control connection.");
-		        socket.close();
-		        ftpInput.close();
-		        printWriter.close();
+		        try {
+					socket.close();
+					ftpInput.close();
+					printWriter.close();
+				} catch (IOException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				}
 		}
+		return null;
 	}
     
+	// Parses the user input. Takes the user input and returns a string array of the inputs
     public static String[] parseInput(byte[] cmdString) {
     	String cmd = "";
     	try {
