@@ -8,3 +8,5 @@ You can then log in using "user USERNAME" e.g. "user anonymous". If response cod
 To enter a password, use "pw PASSWORD". Any password is accepted when logging in using the user "anonymous".
 
 Using "dir" will list out the directory in the console, and using "cd DIRECTORY" will change to the indicated directory assuming it exists.
+
+Using "get REMOTE" will transfer a file from the server to the root directory of this java program.

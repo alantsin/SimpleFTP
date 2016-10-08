@@ -1,7 +1,10 @@
 
 import java.lang.System;
 import java.net.Socket;
+import java.io.BufferedInputStream;
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
@@ -158,6 +161,125 @@ public class CSftp
             	
             }
             
+            // get command
+            if (userInput[0].equals("get")) {
+            	
+            	if (userInput.length == 2) {
+            		
+            		sendCommand("TYPE I");
+            		String response = parseResponse();
+            		
+            		if (response.startsWith("200")) {
+            			
+            			sendCommand("SIZE " + userInput[1]);
+            			response = parseResponse();
+            			
+            			if (response.startsWith("550")) {
+            				
+                            System.out.println("<-- 910 Access to local file " + userInput[1] + " denied.");
+                            continue;
+                            
+            			}
+            			
+            			String split[] = response.split(" ");
+            			int size = Integer.parseInt(split[1]);
+            			
+            			sendCommand("PASV");
+                		response = parseResponse();
+                		
+                		if (response.startsWith("227")) {
+
+                		String[] ipAndPort = parseIPAndPort(response);
+                		System.out.println("IP: " + ipAndPort[0] + " on Port " + ipAndPort[1]);
+                		
+                		Socket dataConnection = new Socket(ipAndPort[0], Integer.parseInt(ipAndPort[1]));
+                		
+                		try {
+                			
+    						if (ftpInput.ready()) {
+    							response = ftpInput.readLine();
+    							
+    							if (response.startsWith("425")) {
+    								
+    								System.out.println("930 Data transfer connection to " + ipAndPort[0] + 
+    												   " on port " + ipAndPort[1] + " failed to open.");
+    								continue;
+    								
+    							}
+    							
+    						}
+    						
+    						BufferedInputStream dataInput = new BufferedInputStream(dataConnection.getInputStream());
+    						
+    						sendCommand("RETR " + userInput[1]);
+    						response = parseResponse();
+    						
+                            if (response.startsWith("450 ")) {
+                            	
+                                System.out.println("<-- 910 Access to local file " + userInput[1] + " denied.");
+                                continue;
+                                
+                            }
+    						
+                            byte readInput[] = new byte[size];
+                            int read;
+                            int offset = 0;
+                            
+                            while ((read = dataInput.read(readInput, offset, readInput.length - offset)) != -1) {
+                            	
+                                offset += read;
+                                
+                                if (readInput.length - offset == 0) {
+                                    break;
+                                }
+                                
+                            }
+                            
+                            try {
+                            	
+                                File file = new File(userInput[1]);   
+                                FileOutputStream fos = new FileOutputStream(file);
+                                fos.write(readInput);
+                                fos.close();
+                                
+                            } catch (IOException io) {
+                                System.out.println("Unable to write into file");
+                            }
+                            
+                            dataConnection.close();
+                            dataInput.close();
+                            parseResponse();
+    						
+    					} catch (IOException io) {
+    						
+    						System.out.println("935 Data transfer connection I/O error, closing data connection.");
+                            dataConnection.close();
+                            
+    	                } catch (IllegalArgumentException i) {
+    	                	
+    						System.out.println("930 Data transfer connection to " + ipAndPort[0] + 
+    								   " on port " + ipAndPort[1] + " failed to open.");
+
+    	                }
+                		
+                        cmdString = new byte[MAX_LEN];
+                        continue;
+            			
+                		}
+            		
+            		}
+            		
+            	}
+            	
+            	else {
+            		
+                    System.out.println("901 Incorrect number of arguments.");
+                    continue;
+            		
+            	}
+            	
+            }
+            
             // cd command
             if (userInput[0].equals("cd")) {
             	
@@ -189,11 +311,15 @@ public class CSftp
             		if (response.startsWith("227")) {
 
             		String[] ipAndPort = parseIPAndPort(response);
+            		System.out.println("IP: " + ipAndPort[0] + " on Port " + ipAndPort[1]);
             		
             		Socket dataConnection = new Socket(ipAndPort[0], Integer.parseInt(ipAndPort[1]));
+            		
             		try {
-						if (ftpInput.ready()) {
+						
+            			if (ftpInput.ready()) {
 							response = ftpInput.readLine();
+							
 							if (response.startsWith("425")) {
 								
 								System.out.println("930 Data transfer connection to " + ipAndPort[0] + 
@@ -201,6 +327,7 @@ public class CSftp
 								continue;
 								
 							}
+							
 						}
 						
 						sendCommand("LIST");
